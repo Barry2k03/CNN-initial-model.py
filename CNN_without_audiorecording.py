@@ -1,3 +1,5 @@
+#cnn
+
 import os
 import librosa
 import numpy as np
@@ -12,8 +14,8 @@ import seaborn as sns
 import resampy
 
 # Function to extract MFCC features and resample audio to 16 kHz
-def extract_mfcc(audio_file_path, num_mfcc=44, target_sample_rate=16000, desired_length = 2048):
-    audio_data, sample_rate = librosa.load(audio_file_path, sr=target_sample_rate, duration=1.0, res_type='kaiser_fast')
+def extract_mfcc(audio_file_path, num_mfcc=44, target_sample_rate=16000, desired_length=2048):
+    audio_data, sample_rate = librosa.load(audio_file_path, sr=target_sample_rate, duration=10.00,res_type='kaiser_fast')
 
     # Zero-pad the audio signal if it's shorter than desired_length
     if len(audio_data) < desired_length:
@@ -27,7 +29,7 @@ def extract_mfcc(audio_file_path, num_mfcc=44, target_sample_rate=16000, desired
 
     return mfccs
 
-# Defining batch size and create data generators
+# Define batch size and create data generators
 batch_size = 32
 
 def data_generator(audio_paths, labels, batch_size, num_mfcc, max_length):
@@ -53,19 +55,20 @@ def data_generator(audio_paths, labels, batch_size, num_mfcc, max_length):
 
             yield np.array(batch_mfcc_sequences), np.array(batch_labels)
 
+# Specify the path to the folder containing your audio files:
 audio_folder_path = 'input'
 
-# Setting a fixed number of MFCC coefficients for all audio files
+# Set a fixed number of MFCC coefficients for all audio files
 num_mfcc = 20
 
-# Setting a smaller maximum length for padding/truncating MFCC sequences
+# Set a smaller maximum length for padding/truncating MFCC sequences
 max_length = 36
 
 # List to store the audio file paths and corresponding labels
 audio_paths = []
 labels = []
 
-# Defining a mapping of folder names to labels
+# Define a mapping of folder names to labels
 class_mapping = {}
 
 # Loop through the audio files in the folder and collect audio file paths and labels:
@@ -86,23 +89,24 @@ for i, folder_name in enumerate(os.listdir(audio_folder_path)):
             label = class_mapping[folder_name]
             labels.append(label)
 
-# Converting the lists to numpy arrays
+# Convert the lists to numpy arrays
 audio_paths = np.array(audio_paths)
 labels = np.array(labels)
 
-# Splitting the data into train and test sets (80% train, 20% test)
+# Split the data into train and test sets (80% train, 20% test)
 train_paths, test_paths, train_labels, test_labels = train_test_split(audio_paths, labels, test_size=0.2, random_state=42)
 
-# Creating data generators for train and test data
+# Create data generators for train and test data
 train_generator = data_generator(train_paths, train_labels, batch_size, num_mfcc, max_length)
 test_generator = data_generator(test_paths, test_labels, batch_size, num_mfcc, max_length)
 
-# Defining the number of classes
-num_classes = len(class_mapping)  # 16
+# Define the number of classes
+num_classes = len(class_mapping)  # 13
 
-if os.path.exists('trained_model.h5'):
+# Check if the saved model exists
+if os.path.exists('train.h5'):
     # Load the saved model
-    loaded_model = tf.keras.models.load_model('trained_model.h5')
+    loaded_model = tf.keras.models.load_model('train.h5')
 else:
     # CNN model with 7 convolutional layers
     model = models.Sequential()
@@ -122,25 +126,26 @@ else:
     model.add(layers.Dense(512, activation='relu'))
     model.add(layers.Dense(num_classes, activation='softmax'))
 
-    # Compiling the model
+    # Compile the model
     model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
 
-    # Printing model summary
+    # Print model summary
     model.summary()
 
+    # Define early stopping
     early_stopping = tf.keras.callbacks.EarlyStopping(patience=5, restore_best_weights=True)
 
-    # Training the model using the data generators
+    # Train the model using the data generators
     epochs = 20
     steps_per_epoch = len(train_paths) // batch_size
     validation_steps = len(test_paths) // batch_size
     model.fit(train_generator, epochs=epochs, steps_per_epoch=steps_per_epoch, validation_data=test_generator, validation_steps=validation_steps, callbacks=[early_stopping])
 
-    # Saving the trained model
-    model.save('trained_model.h5')
+    # Save the trained model
+    model.save('train.h5')
     loaded_model = model
 
-# Evaluating the loaded model on the test data
+# Evaluate the loaded model on the test data
 test_predictions = []
 test_labels = []
 for batch in test_generator:
@@ -163,24 +168,23 @@ for batch in test_generator:
 test_predictions = np.array(test_predictions)
 test_labels = np.array(test_labels)
 
-# Computing the confusion matrix
+# Compute the confusion matrix
 confusion_matrix = metrics.confusion_matrix(test_labels, test_predictions)
 
+# Print the confusion matrix
 print("Confusion Matrix:")
 print(confusion_matrix)
-# Defining a reverse mapping for class labels to class names
+# Define a reverse mapping for class labels to class names
 class_mapping_inv = {v: k for k, v in class_mapping.items()}
 #
-#Computing the original confusion matrix
+#Compute the original confusion matrix
 confusion_mat = sklearn_confusion_matrix(test_labels, test_predictions, labels=np.arange(num_classes))
 
 class_names = list(class_mapping.keys()) #13
 
-# Plotting the original confusion matrix using Seaborn and Matplotlib
+# Plot the original confusion matrix using Seaborn and Matplotlib
 plt.figure(figsize=(10, 8))
 sns.set(font_scale=1)
 sns.heatmap(confusion_mat, annot=True, cmap="Blues", fmt="d", xticklabels=class_names, yticklabels=class_names)
 plt.xlabel("Predicted Labels")
 plt.ylabel("True Labels")
-plt.title("Original Confusion Matrix")
-plt.show()
